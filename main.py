@@ -1,10 +1,13 @@
 import asyncio
 import os
+import uuid
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from aiogram.filters import Command
 from dotenv import load_dotenv
-from script_runner import run_script, stop_script
+from script_runner import stop_script
+import sys
+import subprocess
 
 # Загружаем токен
 load_dotenv()
@@ -43,6 +46,10 @@ class TaskManager:
     def get_task(self, task_id):
         return self.tasks.get(task_id)
 
+    def set_process(self, task_id, process):
+        self.tasks[task_id]['process'] = process
+        return task_id
+
 # Создаем менеджер задач
 task_manager = TaskManager()
 
@@ -51,22 +58,49 @@ task_manager = TaskManager()
 async def start(message: Message):
     await message.answer("Привет! Отправьте мне Python-скрипт для выполнения 🐍")
 
+# Обработка команды /code
+@dp.message(Command("code"))
+async def handle_code(message: Message):
+    code = message.text.split(maxsplit=1)[1]
+    if not code:
+        await message.reply("Пожалуйста, укажите код после команды. Например: /code print(\"gg\")")
+        return
+
+    # Генерируем уникальное имя файла
+    script_name = f"{uuid.uuid4().hex[:4]}.py"
+    script_path = os.path.join(SCRIPTS_DIR, script_name)
+
+    # Сохраняем код в файл
+    with open(script_path, "w") as script_file:
+        script_file.write(code)
+
+    print(f"Код сохранён как `{script_name}`! Добавляю в очередь выполнения...")
+    await message.reply(f"Код сохранён как `{script_name}`! Добавляю в очередь выполнения...", parse_mode="Markdown")
+
+    # Добавляем задачу в список активных
+    # process = await run_script(task_manager._next_task_id, script_path)
+    task_id = task_manager.add_task(script_path, None)
+
+    asyncio.create_task(execute_script(message, script_path, script_name, task_id))
+
 # Обработка загрузки скриптов
 @dp.message(lambda m: m.document)
 async def handle_script(message: Message):
     document = message.document
     if not document.file_name.endswith(".py"):
+        print("Пожалуйста, отправьте файл с расширением .py")
         await message.reply("Пожалуйста, отправьте файл с расширением .py")
         return
 
     # Сохраняем скрипт
     script_path = os.path.join(SCRIPTS_DIR, document.file_name)
     await bot.download(document, destination=script_path)
+    print("Скрипт получен! Добавляю в очередь выполнения...")
     await message.reply("Скрипт получен! Добавляю в очередь выполнения...")
 
     # Добавляем задачу в список активных
-    process = await run_script(task_manager._next_task_id, script_path)
-    task_id = task_manager.add_task(script_path, process)
+    # process = await run_script(task_manager._next_task_id, script_path)
+    task_id = task_manager.add_task(script_path, None)
     
     asyncio.create_task(execute_script(message, script_path, document.file_name, task_id))
 
@@ -85,12 +119,49 @@ async def execute_script(message: Message, script_path: str, file_name: str, tas
     response = f"**Статус**: {status}\n`\n{output}\n`"
     await message.reply(response, parse_mode="Markdown")
 
+async def run_script(task_id: int, script_path: str) -> tuple:
+    """
+    Асинхронный запуск Python-скрипта с ограничением по времени
+    
+    :param task_id: Уникальный идентификатор задачи
+    :param script_path: Путь к скрипту
+    :param timeout: Максимальное время выполнения в секундах
+    :return: Кортеж (вывод, статус)
+    """
+    try:
+        # Создаем процесс с перенаправлением stdout и stderr
+        process = await asyncio.create_subprocess_exec(
+            sys.executable, script_path,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE
+        )
+        task_manager.set_process(task_id, process)
+        
+        # Ожидаем завершение процесса с таймаутом
+        try:
+            stdout, stderr = await process.communicate()
+        except asyncio.TimeoutError:
+            process.kill()
+            return f"Превышено время выполнения ({timeout} сек)", "TIMEOUT"
+        
+        # Декодируем вывод
+        output = (stdout + stderr).decode('utf-8', errors='replace').strip()
+        
+        # Определяем статус выполнения
+        status = "✅" if process.returncode == 0 else "❌"
+        
+        return output, status
+    
+    except Exception as e:
+        return f"Ошибка выполнения: {str(e)}", "EXCEPTION"
+
 # Команда /tasks – показать все активные задачи
 @dp.message(Command("tasks"))
 async def list_tasks(message: Message):
     tasks = task_manager.get_tasks()
     
     if not tasks:
+        print(tasks)
         await message.reply("Нет активных задач 💤")
         return
     
