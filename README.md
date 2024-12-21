@@ -1,97 +1,98 @@
 ### **README.md**
 
-# **Telegram-бот нотификатор для выполнения Python-скриптов**
+# **Telegram Bot Notifier for Running Python Scripts**
 
-Этот бот принимает Python-скрипты, выполняет их в изолированной среде и отправляет результаты выполнения (текст и статус) пользователю через Telegram.
-
----
-
-## **1. Как писать скрипты**
-
-Чтобы скрипт корректно выполнялся ботом, соблюдайте следующие рекомендации:
-
-### **1.1. Основные правила**
-- Скрипт должен быть написан на **Python 3**.
-- Файл должен иметь расширение **`.py`**.
-- Скрипт должен выводить результаты через **print()**.
-- Скрипт не должен требовать ввода данных (**input()** не поддерживается).
+This bot accepts Python scripts, executes them in an isolated environment, and sends the execution results (text and status) to the user via Telegram.
 
 ---
 
-### **1.2. Пример корректного скрипта**
+## **1. How to Write Scripts**
 
-Простой пример:
+To ensure your script executes correctly with the bot, follow these recommendations:
+
+### **1.1. Basic Rules**
+- The script must be written in **Python 3**.
+- The file must have the **`.py`** extension.
+- The script should output results using **print()**.
+- The script should not require user input (**input()** is not supported).
+
+---
+
+### **1.2. Example of a Valid Script**
+
+Simple example:
 ```python
 print("Hello, Telegram!")
 ```
 
-Скрипт с вычислениями:
+Script with calculations:
 ```python
 result = sum([i for i in range(1, 11)])
-print(f"Сумма чисел от 1 до 10: {result}")
+print(f"Sum of numbers from 1 to 10: {result}")
 ```
 
-Скрипт с задержкой:
+Script with a delay:
 ```python
 import time
-print("Начало выполнения...")
-time.sleep(5)  # Задержка в 5 секунд
-print("Выполнение завершено!")
+print("Execution started...")
+time.sleep(5)  # 5-second delay
+print("Execution completed!")
 ```
 
 ---
 
-### **1.3. Запрещенные действия в скриптах**
-- **Бесконечные циклы**: Скрипты, которые не завершаются, будут прерваны по таймауту.
-- **Запрос ввода**: Использование `input()` вызовет ошибку выполнения.
-- **Доступ к файловой системе**: Запись и чтение файлов разрешены только в рамках предоставленной папки, но лучше избегать этого.
-- **Сетевые запросы**: Долгие или блокирующие операции по сети могут вызвать ошибки или таймаут.
+### **1.3. Prohibited Actions in Scripts**
+- **Infinite loops**: Scripts that do not terminate will be stopped by a timeout.
+- **Input requests**: Using `input()` will result in an execution error.
+- **File system access**: Reading and writing files is only allowed within the provided directory, but it is recommended to avoid this.
+- **Network requests**: Long or blocking network operations may cause errors or timeouts.
 
 ---
 
-## **2. Как отправить скрипт боту**
-1. Создайте файл со скриптом, например `my_script.py`.
-2. Отправьте файл боту как **документ** в Telegram.
-3. Бот автоматически выполнит скрипт и отправит результат обратно.
+## **2. How to Send a Script to the Bot**
+1. Create a script file, e.g., `my_script.py`.
+2. Send the file to the bot as a **document** in Telegram.
+3. The bot will automatically execute the script and send back the result.
 
 ---
 
-## **3. Ответ бота**
+## **3. Bot Response**
 
-Бот вернет сообщение в следующем формате:
+The bot will return a message in the following format:
 
 ```
-**Статус**: Успешно выполнено
-**Вывод:**
+**Status**: Successfully executed
+**Output:**
 ```
 ```
-Текстовый вывод вашего скрипта
+Text output from your script
 ```
 
-В случае ошибки:
+In case of an error:
 ```
-**Статус**: Ошибка выполнения
-**Вывод:**
+**Status**: Execution error
+**Output:**
 ```
 ```
-Текст ошибки или причина сбоя
+Error text or failure reason
 ```
 
 ---
 
-## **4. Примеры ошибок**
-| **Ошибка**                     | **Причина**                          |
-|--------------------------------|--------------------------------------|
-| Ошибка выполнения              | Синтаксическая или логическая ошибка |
-| Пожалуйста, отправьте .py файл | Отправлен файл с другим расширением  |
+## **4. Examples of Errors**
+| **Error**                         | **Reason**                           |
+|----------------------------------|--------------------------------------|
+| Execution error                   | Syntax or logical error              |
+| Please send a .py file            | A file with a different extension was sent |
 
 ---
 
-## **5. Рекомендации**
-- Тестируйте скрипты локально перед отправкой.
-- Избегайте сложных вычислений и бесконечных циклов.
-- В случае возникновения проблем проверьте лог-файлы, которые сохраняются ботом.
+## **5. Recommendations**
+- Test scripts locally before sending them.
+- Avoid complex calculations and infinite loops.
+- If problems arise, check the log files saved by the bot.
 
 ---
 
-Теперь вы готовы использовать бота для запуска и проверки своих Python-скриптов! 🚀
+Now you are ready to use the bot to run and test your Python scripts! 🚀
+
