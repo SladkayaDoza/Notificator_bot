@@ -1,6 +1,8 @@
 import asyncio
 import os
 import uuid
+from users import get_allowed_users, add_allowed_user, remove_allowed_user, is_allowed_user
+from psutil import cpu_percent, virtual_memory, disk_usage
 from aiogram import Bot, Dispatcher, types
 from aiogram.types import Message
 from aiogram.filters import Command
@@ -8,6 +10,10 @@ from dotenv import load_dotenv
 from script_runner import stop_script
 import sys
 import subprocess
+import datetime
+from config import cancel_message
+
+start_time = datetime.datetime.now()
 
 # Загружаем токен
 load_dotenv()
@@ -56,11 +62,19 @@ task_manager = TaskManager()
 # Команда /start
 @dp.message(Command("start"))
 async def start(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+
     await message.answer("Привет! Отправьте мне Python-скрипт для выполнения 🐍")
 
 # Обработка команды /code
 @dp.message(Command("code"))
 async def handle_code(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+
     code = message.text.split(maxsplit=1)[1]
     if not code:
         await message.reply("Пожалуйста, укажите код после команды. Например: /code print(\"gg\")")
@@ -86,6 +100,10 @@ async def handle_code(message: Message):
 # Обработка загрузки скриптов
 @dp.message(lambda m: m.document)
 async def handle_script(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+
     document = message.document
     if not document.file_name.endswith(".py"):
         print("Пожалуйста, отправьте файл с расширением .py")
@@ -158,6 +176,10 @@ async def run_script(task_id: int, script_path: str) -> tuple:
 # Команда /tasks – показать все активные задачи
 @dp.message(Command("tasks"))
 async def list_tasks(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+
     tasks = task_manager.get_tasks()
     
     if not tasks:
@@ -182,6 +204,10 @@ async def list_tasks(message: Message):
 # Команда /stop <task_id> – остановить задачу
 @dp.message(Command("stop"))
 async def stop_task(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+        
     args = message.text.split()
     if len(args) != 2 or not args[1].isdigit():
         await message.reply("Использование: /stop <task_id>")
@@ -196,6 +222,68 @@ async def stop_task(message: Message):
         await message.reply(f"Задача с ID {task_id} остановлена ⛔")
     else:
         await message.reply("Задача с таким ID не найдена 🧐")
+
+
+@dp.message(Command("bot"))
+async def bot_info(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+        
+    uptime = str(datetime.datetime.now() - start_time).split(".")[0]
+    ram_total = virtual_memory().total // 1024 // 1024
+    ram_used = virtual_memory().used // 1024 // 1024
+    ram_used_percent = virtual_memory().percent
+    disk_total = disk_usage('/').total // 1024 // 1024 // 1024
+    disk_used = disk_usage('/').used // 1024 // 1024 // 1024
+    disk_used_percent = disk_usage('/').percent
+
+    msg = "*Статистика*\n\n" \
+          f"*ОЗУ*: {ram_used}/{ram_total} МБ ({ram_used_percent:.1f}%)\n" \
+          f"*ЦПУ*: {cpu_percent()}%\n" \
+          f"*Диск*: {disk_used}/{disk_total} ГБ ({disk_used_percent:.1f}%)\n" \
+          f"*Аптайм*: {uptime}\n\n\n"
+
+    await message.reply(msg, parse_mode="Markdown")
+
+@dp.message(Command("getusers"))
+async def get_users(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+
+    if not get_allowed_users():  # Если список пустой
+        await message.reply("Вайт-лист пуст 💤")
+        return
+
+    user_list = "\n".join([f"[{user_id}]" for user_id in get_allowed_users()])
+
+    # Отправляем ответ
+    await message.reply(f"Список разрешённых пользователей:\n{user_list}")
+
+@dp.message(Command("adduser"))
+async def add_user(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+        
+    user_id = message.text.split()[1]
+    
+    reply_text = add_allowed_user(user_id)
+
+    await message.reply(reply_text, parse_mode="Markdown")
+
+@dp.message(Command("removeuser"))
+async def remove_user(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+        
+    user_id = message.text.split()[1]
+    
+    reply_text = remove_allowed_user(user_id)
+
+    await message.reply(reply_text, parse_mode="Markdown")
 
 # Запуск бота
 async def main():
