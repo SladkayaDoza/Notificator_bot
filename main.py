@@ -2,18 +2,18 @@ import asyncio
 import os
 import uuid
 from users import get_allowed_users, add_allowed_user, remove_allowed_user, is_allowed_user
+from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from psutil import cpu_percent, virtual_memory, disk_usage
 from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.filters import Command
 from dotenv import load_dotenv
-from script_runner import stop_script
+from users import add_waiter, remove_waiter, is_waiter
 import sys
 import psutil
-import signal
 import subprocess
 import datetime
-from config import cancel_message
+from config import cancel_message, ADMIN_ID
 from database import Task, session
 
 start_time = datetime.datetime.now()
@@ -286,7 +286,7 @@ async def add_user(message: Message):
         
     user_id = message.text.split()[1]
     
-    reply_text = add_allowed_user(user_id)
+    reply_text = add_allowed_user(int(user_id))
 
     await message.reply(reply_text, parse_mode="Markdown")
 
@@ -298,9 +298,49 @@ async def remove_user(message: Message):
         
     user_id = message.text.split()[1]
     
-    reply_text = remove_allowed_user(user_id)
+    reply_text = remove_allowed_user(int(user_id))
 
     await message.reply(reply_text, parse_mode="Markdown")
+
+# Команда для подачи заявки
+@dp.message(Command("request"))
+async def apply_whitelist(message: Message):
+    user_id = message.from_user.id
+    username = message.from_user.username or "Без имени"
+    if is_waiter(user_id):
+        await message.reply("Ваша заявка уже отправлена администратору!")
+        return
+    add_waiter(user_id)
+
+    # Клавиатура для принятия/отклонения
+    keyboard = InlineKeyboardMarkup(inline_keyboard=[
+        [InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{user_id}_{username}"),
+         InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{user_id}_{username}")]
+    ])
+
+    # Отправка заявки админу
+    await bot.send_message(
+        ADMIN_ID,
+        f"Пользователь {username} (ID: {user_id}) подал заявку в вайт-лист.",
+        reply_markup=keyboard
+    )
+    await message.reply("Ваша заявка отправлена администратору.")
+
+# Обработка нажатий кнопок
+@dp.callback_query(lambda c: c.data.startswith("accept") or c.data.startswith("reject"))
+async def process_whitelist(callback: CallbackQuery):
+    action, user_id, username = callback.data.split("_")
+
+    if action == "accept":
+        add_allowed_user(int(user_id))
+        await bot.send_message(user_id, "Ваша заявка в вайт-лист принята ✅.")
+        await callback.message.edit_text(f"Пользователь {username} ({user_id}) добавлен в вайт-лист.")
+        remove_waiter(int(user_id))
+    elif action == "reject":
+        await bot.send_message(user_id, "Ваша заявка в вайт-лист отклонена ❌.")
+        await callback.message.edit_text(f"Пользователь {username} ({user_id}) отклонён.")
+        remove_waiter(int(user_id))
+    await callback.answer()
 
 # Запуск бота
 async def main():
