@@ -35,7 +35,6 @@ def remove_allowed_user(user_id):
         return f"Пользователь с id {user_id} успешно удален"
     except Exception as e:
         return e
-    return True
 
 def add_allowed_user(user_id):
     try:
@@ -44,4 +43,3 @@ def add_allowed_user(user_id):
         return f"Пользователь с id {user_id} успешно добавлен"
     except Exception as e:
         return e
-    return True

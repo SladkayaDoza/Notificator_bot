@@ -3,15 +3,18 @@ import os
 import uuid
 from users import get_allowed_users, add_allowed_user, remove_allowed_user, is_allowed_user
 from psutil import cpu_percent, virtual_memory, disk_usage
-from aiogram import Bot, Dispatcher, types
+from aiogram import Bot, Dispatcher
 from aiogram.types import Message
 from aiogram.filters import Command
 from dotenv import load_dotenv
 from script_runner import stop_script
 import sys
+import psutil
+import signal
 import subprocess
 import datetime
 from config import cancel_message
+from database import Task, session
 
 start_time = datetime.datetime.now()
 
@@ -33,28 +36,51 @@ class TaskManager:
         self.tasks = {}
         self._next_task_id = 1
 
-    def add_task(self, script_path, process):
-        task_id = self._next_task_id
-        self.tasks[task_id] = {
-            'script_path': script_path,
-            'process': process,
-            'start_time': asyncio.get_running_loop().time()
-        }
-        self._next_task_id += 1
-        return task_id
+    def add_task(self, user_id: int, pid: int, name: str, path: str):
+        task_id = self.get_next_user_id(user_id)
+        # Добавляем новую задачу
+        new_task = Task(user_id=user_id, user_task_id=task_id, task_name=name, started_time=datetime.datetime.now(), status="active", process_id = pid, code_path=path)
+        session.add(new_task)
+        session.commit()
+        print("Задача добавлена!")
 
-    def remove_task(self, task_id):
-        return self.tasks.pop(task_id, None)
+    def get_next_user_id(self, user_id):
+        return session.query(Task).filter(Task.user_id == user_id).count() + 1
+    
+    def update_status(self, pid, status):
+        task = session.query(Task).filter(Task.process_id == pid).first()
+        if task:
+            task.status = status
+            session.commit()
+    
+    def set_end_time(self, pid, end_time):
+        task = session.query(Task).filter(Task.process_id == pid).first()
+        if task:
+            task.end_time = end_time
+            session.commit()
 
-    def get_tasks(self):
-        return self.tasks
+    def remove_task(self, user_id, task_id):
+        # return self.tasks.pop(task_id, None)
+        task = session.query(Task).filter(Task.user_id == user_id, Task.user_task_id == task_id).first()
+        if task:
+            session.delete(task)
+            session.commit()
+            return "Задача удалена!"
+        else: return "Задачи не существует"
 
-    def get_task(self, task_id):
-        return self.tasks.get(task_id)
+    def get_tasks(self, id):
+        return session.query(Task).filter(Task.user_id == id, Task.status == "active").all()
 
-    def set_process(self, task_id, process):
-        self.tasks[task_id]['process'] = process
-        return task_id
+    def get_task(self, user_id, task_id):
+        return session.query(Task).filter(Task.user_id == user_id, Task.user_task_id == task_id, Task.status == "active").first()
+
+    def stop_process(self, pid):
+        self.update_status(pid, "canceled")
+        try:
+            p = psutil.Process(pid)
+            p.kill()
+        except Exception as e:
+            print(e)
 
 # Создаем менеджер задач
 task_manager = TaskManager()
@@ -91,11 +117,7 @@ async def handle_code(message: Message):
     print(f"Код сохранён как `{script_name}`! Добавляю в очередь выполнения...")
     await message.reply(f"Код сохранён как `{script_name}`! Добавляю в очередь выполнения...", parse_mode="Markdown")
 
-    # Добавляем задачу в список активных
-    # process = await run_script(task_manager._next_task_id, script_path)
-    task_id = task_manager.add_task(script_path, None)
-
-    asyncio.create_task(execute_script(message, script_path, script_name, task_id))
+    asyncio.create_task(execute_script(message, script_path, script_name))
 
 # Обработка загрузки скриптов
 @dp.message(lambda m: m.document)
@@ -115,21 +137,15 @@ async def handle_script(message: Message):
     await bot.download(document, destination=script_path)
     print("Скрипт получен! Добавляю в очередь выполнения...")
     await message.reply("Скрипт получен! Добавляю в очередь выполнения...")
-
-    # Добавляем задачу в список активных
-    # process = await run_script(task_manager._next_task_id, script_path)
-    task_id = task_manager.add_task(script_path, None)
     
-    asyncio.create_task(execute_script(message, script_path, document.file_name, task_id))
+    asyncio.create_task(execute_script(message, script_path, document.file_name))
 
-async def execute_script(message: Message, script_path: str, file_name: str, task_id: int):
-    output, status = await run_script(task_id, script_path)
-    
-    # Удаляем задачу после завершения
-    task_manager.remove_task(task_id)
+async def execute_script(message: Message, script_path: str, file_name: str):
+    output, status, pid = await run_script(message, script_path, file_name)
+    task_manager.set_end_time(pid, datetime.datetime.now())
     
     # Логируем результат
-    log_path = os.path.join(LOGS_DIR, f"{file_name}.log")
+    log_path = os.path.join(LOGS_DIR, f"{message.from_user.id}_{pid}_{file_name}.log")
     with open(log_path, "w") as log_file:
         log_file.write(output)
     
@@ -137,7 +153,7 @@ async def execute_script(message: Message, script_path: str, file_name: str, tas
     response = f"**Статус**: {status}\n`\n{output}\n`"
     await message.reply(response, parse_mode="Markdown")
 
-async def run_script(task_id: int, script_path: str) -> tuple:
+async def run_script(message: Message, script_path: str, script_name: str) -> tuple:
     """
     Асинхронный запуск Python-скрипта с ограничением по времени
     
@@ -153,14 +169,16 @@ async def run_script(task_id: int, script_path: str) -> tuple:
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE
         )
-        task_manager.set_process(task_id, process)
+        task_manager.add_task(message.from_user.id, process.pid, script_name, script_path)
         
         # Ожидаем завершение процесса с таймаутом
         try:
             stdout, stderr = await process.communicate()
+            task_manager.update_status(process.pid, "completed")
         except asyncio.TimeoutError:
+            task_manager.update_status(process.pid, "timeout")
             process.kill()
-            return f"Превышено время выполнения ({timeout} сек)", "TIMEOUT"
+            return f"Превышено время выполнения", "TIMEOUT", process.pid
         
         # Декодируем вывод
         output = (stdout + stderr).decode('utf-8', errors='replace').strip()
@@ -168,10 +186,10 @@ async def run_script(task_id: int, script_path: str) -> tuple:
         # Определяем статус выполнения
         status = "✅" if process.returncode == 0 else "❌"
         
-        return output, status
+        return output, status, process.pid
     
     except Exception as e:
-        return f"Ошибка выполнения: {str(e)}", "EXCEPTION"
+        return f"Ошибка выполнения: {str(e)}", "EXCEPTION", process.pid
 
 # Команда /tasks – показать все активные задачи
 @dp.message(Command("tasks"))
@@ -180,21 +198,21 @@ async def list_tasks(message: Message):
         await message.reply(cancel_message)
         return
 
-    tasks = task_manager.get_tasks()
+    tasks = task_manager.get_tasks(message.from_user.id)
     
     if not tasks:
         print(tasks)
         await message.reply("Нет активных задач 💤")
         return
     
-    current_time = asyncio.get_running_loop().time()
+    current_time = datetime.datetime.now()
     tasks_list = []
     
-    for task_id, task_info in tasks.items():
-        runtime = current_time - task_info['start_time']
+    for task in tasks:
+        runtime = current_time - task.started_time
         task_description = (
-            f"ID: {task_id} – {os.path.basename(task_info['script_path'])} "
-            f"(Время выполнения: {runtime:.2f} сек)"
+            f"ID: {task.user_task_id} – {os.path.basename(task.code_path)} "
+            f": {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
         )
         tasks_list.append(task_description)
     
@@ -202,7 +220,7 @@ async def list_tasks(message: Message):
     await message.reply(f"**Активные задачи:**\n{tasks_text}", parse_mode="Markdown")
 
 # Команда /stop <task_id> – остановить задачу
-@dp.message(Command("stop"))
+@dp.message(Command("kill"))
 async def stop_task(message: Message):
     if not is_allowed_user(message.from_user.id):
         await message.reply(cancel_message)
@@ -214,11 +232,10 @@ async def stop_task(message: Message):
         return
     
     task_id = int(args[1])
-    task = task_manager.get_task(task_id)
+    task = task_manager.get_task(message.from_user.id, task_id)
     
     if task:
-        stop_script(task['process'])  # Завершаем процесс
-        task_manager.remove_task(task_id)
+        task_manager.stop_process(task.process_id)
         await message.reply(f"Задача с ID {task_id} остановлена ⛔")
     else:
         await message.reply("Задача с таким ID не найдена 🧐")
