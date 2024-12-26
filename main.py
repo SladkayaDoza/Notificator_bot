@@ -112,7 +112,8 @@ async def handle_code(message: Message):
         return
 
     # Генерируем уникальное имя файла
-    script_name = f"{uuid.uuid4().hex[:4]}.py"
+    label = f"{uuid.uuid4().hex[:4]}.py"
+    script_name = f"{message.chat.id}_{label}"
     script_path = os.path.join(SCRIPTS_DIR, script_name)
 
     # Сохраняем код в файл
@@ -120,7 +121,7 @@ async def handle_code(message: Message):
         script_file.write(code)
 
     print(f"Код сохранён как `{script_name}`! Добавляю в очередь выполнения...")
-    await message.reply(f"Код сохранён как `{script_name}`! Добавляю в очередь выполнения...", parse_mode="Markdown")
+    await message.reply(f"Код сохранён как `{label}`! Добавляю в очередь выполнения...", parse_mode="Markdown")
 
     asyncio.create_task(execute_script(message, script_path, script_name))
 
@@ -150,7 +151,7 @@ async def execute_script(message: Message, script_path: str, file_name: str):
     task_manager.set_end_time(pid, datetime.datetime.now())
     
     # Логируем результат
-    log_path = os.path.join(LOGS_DIR, f"{message.chat.id}_{pid}_{file_name}.log")
+    log_path = os.path.join(LOGS_DIR, f"{pid}_{file_name}.log")
     with open(log_path, "w") as log_file:
         log_file.write(output)
     
@@ -225,7 +226,7 @@ async def list_tasks(message: Message):
     for task in tasks:
         runtime = current_time - task.started_time
         task_description = (
-            f"ID: {task.user_task_id} – {os.path.basename(task.code_path)} "
+            f"ID: {task.user_task_id} – {os.path.basename(task.task_name)} "
             f": {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
         )
         tasks_list.append(task_description)
