@@ -13,8 +13,13 @@ import sys
 import psutil
 import subprocess
 import datetime
-from config import cancel_message, ADMIN_ID
+import platform
+from config import cancel_message, ADMIN_ID, memory_limit
 from database import Task, session
+
+IS_WINDOWS = platform.system() == "Windows"
+if not IS_WINDOWS:
+    import resource  # Доступен только на Unix-системах
 
 start_time = datetime.datetime.now()
 
@@ -164,10 +169,19 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
     """
     try:
         # Создаем процесс с перенаправлением stdout и stderr
+        def set_memory_limit():
+            if not IS_WINDOWS and memory_limit is not None:
+                # Преобразуем лимит в байты
+                memory_limit_bytes = memory_limit * 1024 * 1024
+                # Устанавливаем лимит памяти для процесса
+                resource.setrlimit(resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes))
+
+
         process = await asyncio.create_subprocess_exec(
             sys.executable, script_path,
             stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE
+            stderr=subprocess.PIPE,
+            preexec_fn=set_memory_limit if not IS_WINDOWS else None
         )
         task_manager.add_task(message.from_user.id, process.pid, script_name, script_path)
         
