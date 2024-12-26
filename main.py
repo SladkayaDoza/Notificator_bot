@@ -41,16 +41,16 @@ class TaskManager:
         self.tasks = {}
         self._next_task_id = 1
 
-    def add_task(self, user_id: int, pid: int, name: str, path: str):
-        task_id = self.get_next_user_id(user_id)
+    def add_task(self, user_id: int, pid: int, name: str, path: str, chat_id: int):
+        task_id = self.get_next_user_id(chat_id)
         # Добавляем новую задачу
-        new_task = Task(user_id=user_id, user_task_id=task_id, task_name=name, started_time=datetime.datetime.now(), status="active", process_id = pid, code_path=path)
+        new_task = Task(user_id=user_id, chat_id=chat_id, user_task_id=task_id, task_name=name, started_time=datetime.datetime.now(), status="active", process_id = pid, code_path=path)
         session.add(new_task)
         session.commit()
         print("Задача добавлена!")
 
-    def get_next_user_id(self, user_id):
-        return session.query(Task).filter(Task.user_id == user_id).count() + 1
+    def get_next_user_id(self, id):
+        return session.query(Task).filter(Task.chat_id == id).count() + 1
     
     def update_status(self, pid, status):
         task = session.query(Task).filter(Task.process_id == pid).first()
@@ -74,10 +74,10 @@ class TaskManager:
         else: return "Задачи не существует"
 
     def get_tasks(self, id):
-        return session.query(Task).filter(Task.user_id == id, Task.status == "active").all()
+        return session.query(Task).filter(Task.chat_id == id, Task.status == "active").all()
 
-    def get_task(self, user_id, task_id):
-        return session.query(Task).filter(Task.user_id == user_id, Task.user_task_id == task_id, Task.status == "active").first()
+    def get_task(self, id, task_id):
+        return session.query(Task).filter(Task.chat_id == id, Task.user_task_id == task_id, Task.status == "active").first()
 
     def stop_process(self, pid):
         self.update_status(pid, "canceled")
@@ -150,7 +150,7 @@ async def execute_script(message: Message, script_path: str, file_name: str):
     task_manager.set_end_time(pid, datetime.datetime.now())
     
     # Логируем результат
-    log_path = os.path.join(LOGS_DIR, f"{message.from_user.id}_{pid}_{file_name}.log")
+    log_path = os.path.join(LOGS_DIR, f"{message.chat.id}_{pid}_{file_name}.log")
     with open(log_path, "w") as log_file:
         log_file.write(output)
     
@@ -183,7 +183,7 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
             stderr=subprocess.PIPE,
             preexec_fn=set_memory_limit if not IS_WINDOWS else None
         )
-        task_manager.add_task(message.from_user.id, process.pid, script_name, script_path)
+        task_manager.add_task(message.from_user.id, process.pid, script_name, script_path, message.chat.id)
         
         # Ожидаем завершение процесса с таймаутом
         try:
@@ -212,7 +212,7 @@ async def list_tasks(message: Message):
         await message.reply(cancel_message)
         return
 
-    tasks = task_manager.get_tasks(message.from_user.id)
+    tasks = task_manager.get_tasks(message.chat.id)
     
     if not tasks:
         print(tasks)
@@ -246,7 +246,7 @@ async def stop_task(message: Message):
         return
     
     task_id = int(args[1])
-    task = task_manager.get_task(message.from_user.id, task_id)
+    task = task_manager.get_task(message.chat.id, task_id)
     
     if task:
         task_manager.stop_process(task.process_id)

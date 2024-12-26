@@ -12,6 +12,7 @@ class Task(Base):
 
     id = Column(Integer, primary_key=True)  # Уникальный идентификатор задачи
     user_id = Column(Integer, nullable=False)  # ID пользователя
+    chat_id = Column(Integer, nullable=False)  # ID пользователя
     user_task_id = Column(Integer, nullable=False)  # ID задачи пользователя
     task_name = Column(String, nullable=False)  # Название задачи
     started_time = Column(DateTime, default=datetime.utcnow)  # Время начала
