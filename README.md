@@ -35,14 +35,17 @@ This bot allows users to send Python scripts, execute them in a controlled envir
 3. Create a `.env` file and add the following:
    ```env
    BOT_TOKEN=your_bot_token
+   ```
+5. Edit config.py file:
+   ```py
    ADMIN_ID=your_admin_id
    MEMORY_LIMIT=256 # Memory limit in MB
    ```
-4. Initialize the database:
+5. Initialize the database:
    ```bash
    python init_db.py
    ```
-5. Start the bot:
+6. Start the bot:
    ```bash
    python main.py
    ```
