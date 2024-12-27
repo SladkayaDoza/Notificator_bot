@@ -25,8 +25,8 @@ This bot allows users to send Python scripts, execute them in a controlled envir
 ### Steps
 1. Clone the repository:
    ```bash
-   git clone <repository_url>
-   cd <repository>
+   git clone https://github.com/SladkayaDoza/Notificator_bot.git
+   cd Notificator_bot
    ```
 2. Install dependencies:
    ```bash
@@ -36,16 +36,12 @@ This bot allows users to send Python scripts, execute them in a controlled envir
    ```env
    BOT_TOKEN=your_bot_token
    ```
-5. Edit config.py file:
+4. Edit config.py file:
    ```py
    ADMIN_ID=your_admin_id
    MEMORY_LIMIT=256 # Memory limit in MB
    ```
-5. Initialize the database:
-   ```bash
-   python init_db.py
-   ```
-6. Start the bot:
+5. Start the bot:
    ```bash
    python main.py
    ```
@@ -106,7 +102,6 @@ print("Execution completed!")
 
 ## Restrictions
 
-- **No Infinite Loops:** Scripts exceeding execution time limits are terminated.
 - **No Inputs:** Scripts requiring `input()` are not supported.
 - **Memory Limit:** Scripts using excessive memory will be terminated.
 
@@ -120,7 +115,6 @@ System performance can be checked using the `/bot` command, displaying CPU, memo
 
 ## Troubleshooting
 - **Error: Invalid File Format**: Ensure the script has a `.py` extension.
-- **Execution Timeout**: Optimize the script for shorter execution times.
 - **Permission Denied**: Request admin approval through `/request`.
 
 ---
