@@ -1,24 +1,78 @@
-### **README.md**
+# Telegram Bot for Python Script Execution
 
-# **Telegram Bot Notifier for Running Python Scripts**
-
-This bot accepts Python scripts, executes them in an isolated environment, and sends the execution results (text and status) to the user via Telegram.
+This bot allows users to send Python scripts, execute them in a controlled environment, and receive execution results via Telegram. The bot also supports task management, user whitelisting, and system performance monitoring.
 
 ---
 
-## **1. How to Write Scripts**
+## Features
 
-To ensure your script executes correctly with the bot, follow these recommendations:
-
-### **1.1. Basic Rules**
-- The script must be written in **Python 3**.
-- The file must have the **`.py`** extension.
-- The script should output results using **print()**.
-- The script should not require user input (**input()** is not supported).
+- **Script Execution:** Upload Python scripts and receive output directly in Telegram.
+- **Task Management:** View, stop, and manage active tasks.
+- **User Management:** Control access through a whitelist system.
+- **System Monitoring:** Check CPU, memory, and disk usage.
+- **Request System:** Apply for whitelist access directly via Telegram.
 
 ---
 
-### **1.2. Example of a Valid Script**
+## Installation
+
+### Prerequisites
+- Python 3.8+
+- Telegram bot token from BotFather
+- PostgreSQL database for storing task and user data
+- `dotenv` package for environment variables
+
+### Steps
+1. Clone the repository:
+   ```bash
+   git clone <repository_url>
+   cd <repository>
+   ```
+2. Install dependencies:
+   ```bash
+   pip install -r requirements.txt
+   ```
+3. Create a `.env` file and add the following:
+   ```env
+   BOT_TOKEN=your_bot_token
+   ADMIN_ID=your_admin_id
+   MEMORY_LIMIT=256 # Memory limit in MB
+   ```
+4. Initialize the database:
+   ```bash
+   python init_db.py
+   ```
+5. Start the bot:
+   ```bash
+   python main.py
+   ```
+
+---
+
+## Usage
+
+### Commands
+
+| **Command**              | **Description**                                                       |
+|--------------------------|------------------------------------------------------------------------|
+| `/start`                 | Start interaction with the bot.                                       |
+| `/code <script>`         | Send code directly as a command.                                      |
+| `/tasks`                 | List all active tasks.                                                |
+| `/kill <task_id>`        | Stop a specific task.                                                 |
+| `/bot`                   | Display bot and system statistics.                                    |
+| `/getusers`              | List all allowed users.                                               |
+| `/adduser <user_id>`     | Add a user to the whitelist.                                          |
+| `/removeuser <user_id>`  | Remove a user from the whitelist.                                     |
+| `/request`               | Submit a whitelist request to the administrator.                      |
+
+### Sending Scripts
+1. Prepare a Python script with a `.py` extension.
+2. Send the script as a document attachment to the bot.
+3. The bot executes the script and responds with the result.
+
+---
+
+## Example Script
 
 Simple example:
 ```python
@@ -34,65 +88,44 @@ print(f"Sum of numbers from 1 to 10: {result}")
 Script with a delay:
 ```python
 import time
-print("Execution started...")
 time.sleep(5)  # 5-second delay
 print("Execution completed!")
 ```
 
 ---
 
-### **1.3. Prohibited Actions in Scripts**
-- **Infinite loops**: Scripts that do not terminate will be stopped by a timeout.
-- **Input requests**: Using `input()` will result in an execution error.
-- **File system access**: Reading and writing files is only allowed within the provided directory, but it is recommended to avoid this.
-- **Network requests**: Long or blocking network operations may cause errors or timeouts.
+## Task Management
+- View all tasks using `/tasks`.
+- Stop any active task with `/kill <task_id>`.
+- Logs for executed scripts are saved in the `logs/` directory.
 
 ---
 
-## **2. How to Send a Script to the Bot**
-1. Create a script file, e.g., `my_script.py`.
-2. Send the file to the bot as a **document** in Telegram.
-3. The bot will automatically execute the script and send back the result.
+## Restrictions
+
+- **No Infinite Loops:** Scripts exceeding execution time limits are terminated.
+- **No Inputs:** Scripts requiring `input()` are not supported.
+- **Memory Limit:** Scripts using excessive memory will be terminated.
 
 ---
 
-## **3. Bot Response**
-
-The bot will return a message in the following format:
-
-```
-**Status**: Successfully executed
-**Output:**
-```
-```
-Text output from your script
-```
-
-In case of an error:
-```
-**Status**: Execution error
-**Output:**
-```
-```
-Error text or failure reason
-```
+## Logs and Monitoring
+Logs for executed scripts are saved in the `logs/` directory, with timestamps and outputs.
+System performance can be checked using the `/bot` command, displaying CPU, memory, and disk usage.
 
 ---
 
-## **4. Examples of Errors**
-| **Error**                         | **Reason**                           |
-|----------------------------------|--------------------------------------|
-| Execution error                   | Syntax or logical error              |
-| Please send a .py file            | A file with a different extension was sent |
+## Troubleshooting
+- **Error: Invalid File Format**: Ensure the script has a `.py` extension.
+- **Execution Timeout**: Optimize the script for shorter execution times.
+- **Permission Denied**: Request admin approval through `/request`.
 
 ---
 
-## **5. Recommendations**
-- Test scripts locally before sending them.
-- Avoid complex calculations and infinite loops.
-- If problems arise, check the log files saved by the bot.
+## Contributing
+Pull requests are welcome. For major changes, please open an issue first to discuss your ideas.
 
 ---
 
-Now you are ready to use the bot to run and test your Python scripts! 🚀
+Now you are ready to manage and execute Python scripts using this bot! 🚀
 
