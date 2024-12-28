@@ -47,7 +47,7 @@ class TaskManager:
         new_task = Task(user_id=user_id, chat_id=chat_id, user_task_id=task_id, task_name=name, started_time=datetime.datetime.now(), status="active", process_id = pid, code_path=path)
         session.add(new_task)
         session.commit()
-        print("Задача добавлена!")
+        print("Task added!")
 
     def get_next_user_id(self, id):
         return session.query(Task).filter(Task.chat_id == id).count() + 1
@@ -70,8 +70,8 @@ class TaskManager:
         if task:
             session.delete(task)
             session.commit()
-            return "Задача удалена!"
-        else: return "Задачи не существует"
+            return "Task deleted!"
+        else: return "The task does not exist"
 
     def get_active_tasks(self, id):
         return session.query(Task).filter(Task.chat_id == id, Task.status == "active").all()
@@ -79,8 +79,11 @@ class TaskManager:
     def get_archive_tasks(self, id):
         return session.query(Task).filter(Task.chat_id == id, Task.status == "completed").all()
 
-    def get_task(self, id, task_id):
+    def get_active_task(self, id, task_id):
         return session.query(Task).filter(Task.chat_id == id, Task.user_task_id == task_id, Task.status == "active").first()
+    
+    def get_all_task(self, id, task_id):
+        return session.query(Task).filter(Task.chat_id == id, Task.user_task_id == task_id).first()
 
     def stop_process(self, pid):
         self.update_status(pid, "canceled")
@@ -103,6 +106,24 @@ async def start(message: Message):
     await message.answer("Hello! Send me a Python script to run 🐍")
 
 # Обработка команды /code
+@dp.message(Command("launch"))
+async def handle_code(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+    task_id = message.text.split(maxsplit=1)[1]
+    task = task_manager.get_all_task(message.chat.id, task_id)
+    if not task:
+        await message.reply(f"There is no task with this ID")
+    
+    script_path = task.code_path
+    label = task.task_name
+
+    await message.reply(f"Saved code running as `{label}`! Adding to the execution queue...", parse_mode="Markdown")
+
+    asyncio.create_task(execute_script(message, script_path, label))
+
+# Обработка команды /code
 @dp.message(Command("code"))
 async def handle_code(message: Message):
     if not is_allowed_user(message.from_user.id):
@@ -116,7 +137,7 @@ async def handle_code(message: Message):
 
     # Генерируем уникальное имя файла
     label = f"{uuid.uuid4().hex[:5]}.py"
-    script_name = f"{message.chat.id}{label}"
+    script_name = f"{message.chat.id}_{label}"
     script_path = os.path.join(SCRIPTS_DIR, script_name)
 
     # Сохраняем код в файл
@@ -146,8 +167,8 @@ async def handle_script(message: Message):
     script_name = f"{uuid.uuid4().hex[:4]}_{label}"
     script_path = os.path.join(SCRIPTS_DIR, script_name)
     await bot.download(document, destination=script_path)
-    print(f"Script received! `{label}` Adding execution to the queue...")
-    await message.reply(f"Script received! `{script_name}` Adding to the execution queue...")
+    print(f"Script received! `{script_name}` Adding execution to the queue...")
+    await message.reply(f"Script received! `{label}` Adding to the execution queue...", parse_mode="Markdown")
     
     asyncio.create_task(execute_script(message, script_path, label))
 
@@ -280,7 +301,7 @@ async def stop_task(message: Message):
         return
     
     task_id = int(args[1])
-    task = task_manager.get_task(message.chat.id, task_id)
+    task = task_manager.get_active_task(message.chat.id, task_id)
     
     if task:
         task_manager.stop_process(task.process_id)
@@ -392,6 +413,7 @@ async def process_whitelist(callback: CallbackQuery):
 
 # Запуск бота
 async def main():
+    print("Bot runned!")
     await dp.start_polling(bot)
 
 if __name__ == "__main__":
