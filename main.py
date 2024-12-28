@@ -73,8 +73,11 @@ class TaskManager:
             return "Задача удалена!"
         else: return "Задачи не существует"
 
-    def get_tasks(self, id):
+    def get_active_tasks(self, id):
         return session.query(Task).filter(Task.chat_id == id, Task.status == "active").all()
+    
+    def get_archive_tasks(self, id):
+        return session.query(Task).filter(Task.chat_id == id, Task.status == "completed").all()
 
     def get_task(self, id, task_id):
         return session.query(Task).filter(Task.chat_id == id, Task.user_task_id == task_id, Task.status == "active").first()
@@ -97,7 +100,7 @@ async def start(message: Message):
         await message.reply(cancel_message)
         return
 
-    await message.answer("Привет! Отправьте мне Python-скрипт для выполнения 🐍")
+    await message.answer("Hello! Send me a Python script to run 🐍")
 
 # Обработка команды /code
 @dp.message(Command("code"))
@@ -108,22 +111,22 @@ async def handle_code(message: Message):
 
     code = message.text.split(maxsplit=1)[1]
     if not code:
-        await message.reply("Пожалуйста, укажите код после команды. Например: /code print(\"gg\")")
+        await message.reply("Please include the code after the command. For example: /code print(\"gg\")")
         return
 
     # Генерируем уникальное имя файла
-    label = f"{uuid.uuid4().hex[:4]}.py"
-    script_name = f"{message.chat.id}_{label}"
+    label = f"{uuid.uuid4().hex[:5]}.py"
+    script_name = f"{message.chat.id}{label}"
     script_path = os.path.join(SCRIPTS_DIR, script_name)
 
     # Сохраняем код в файл
     with open(script_path, "w") as script_file:
         script_file.write(code)
 
-    print(f"Код сохранён как `{script_name}`! Добавляю в очередь выполнения...")
-    await message.reply(f"Код сохранён как `{label}`! Добавляю в очередь выполнения...", parse_mode="Markdown")
+    print(f"The code is saved as `{script_name}`! Adding to the execution queue...")
+    await message.reply(f"The code is saved as `{label}`! Adding to the execution queue...", parse_mode="Markdown")
 
-    asyncio.create_task(execute_script(message, script_path, script_name))
+    asyncio.create_task(execute_script(message, script_path, label))
 
 # Обработка загрузки скриптов
 @dp.message(lambda m: m.document)
@@ -134,17 +137,19 @@ async def handle_script(message: Message):
 
     document = message.document
     if not document.file_name.endswith(".py"):
-        print("Пожалуйста, отправьте файл с расширением .py")
-        await message.reply("Пожалуйста, отправьте файл с расширением .py")
+        print("Please send the file with .py extension")
+        await message.reply("Please send the file with .py extension")
         return
 
     # Сохраняем скрипт
-    script_path = os.path.join(SCRIPTS_DIR, document.file_name)
+    label = document.file_name
+    script_name = f"{uuid.uuid4().hex[:4]}_{label}"
+    script_path = os.path.join(SCRIPTS_DIR, script_name)
     await bot.download(document, destination=script_path)
-    print("Скрипт получен! Добавляю в очередь выполнения...")
-    await message.reply("Скрипт получен! Добавляю в очередь выполнения...")
+    print(f"Script received! `{label}` Adding execution to the queue...")
+    await message.reply(f"Script received! `{script_name}` Adding to the execution queue...")
     
-    asyncio.create_task(execute_script(message, script_path, document.file_name))
+    asyncio.create_task(execute_script(message, script_path, label))
 
 async def execute_script(message: Message, script_path: str, file_name: str):
     output, status, pid = await run_script(message, script_path, file_name)
@@ -193,7 +198,7 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
         except asyncio.TimeoutError:
             task_manager.update_status(process.pid, "timeout")
             process.kill()
-            return f"Превышено время выполнения", "TIMEOUT", process.pid
+            return f"Execution time exceeded", "TIMEOUT", process.pid
         
         # Декодируем вывод
         output = (stdout + stderr).decode('utf-8', errors='replace').strip()
@@ -204,7 +209,7 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
         return output, status, process.pid
     
     except Exception as e:
-        return f"Ошибка выполнения: {str(e)}", "EXCEPTION", process.pid
+        return f"Runtime error: {str(e)}", "EXCEPTION", process.pid
 
 # Команда /tasks – показать все активные задачи
 @dp.message(Command("tasks"))
@@ -213,11 +218,11 @@ async def list_tasks(message: Message):
         await message.reply(cancel_message)
         return
 
-    tasks = task_manager.get_tasks(message.chat.id)
+    tasks = task_manager.get_active_tasks(message.chat.id)
     
     if not tasks:
         print(tasks)
-        await message.reply("Нет активных задач 💤")
+        await message.reply("No active tasks 💤")
         return
     
     current_time = datetime.datetime.now()
@@ -232,7 +237,35 @@ async def list_tasks(message: Message):
         tasks_list.append(task_description)
     
     tasks_text = "\n".join(tasks_list)
-    await message.reply(f"**Активные задачи:**\n{tasks_text}", parse_mode="Markdown")
+    await message.reply(f"**Active tasks:**\n{tasks_text}", parse_mode="Markdown")
+
+# Команда /archive – показать все завершенные задачи
+@dp.message(Command("archive"))
+async def list_tasks(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+
+    tasks = task_manager.get_archive_tasks(message.chat.id)
+    
+    if not tasks:
+        print(tasks)
+        await message.reply("No completed task tasks 💤")
+        return
+    
+    current_time = datetime.datetime.now()
+    tasks_list = []
+    
+    for task in tasks:
+        runtime = current_time - task.started_time
+        task_description = (
+            f"ID: {task.user_task_id} – {os.path.basename(task.task_name)} "
+            f": {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
+        )
+        tasks_list.append(task_description)
+    
+    tasks_text = "\n".join(tasks_list)
+    await message.reply(f"**Tasks archive:**\n{tasks_text}", parse_mode="Markdown")
 
 # Команда /stop <task_id> – остановить задачу
 @dp.message(Command("kill"))
@@ -243,7 +276,7 @@ async def stop_task(message: Message):
         
     args = message.text.split()
     if len(args) != 2 or not args[1].isdigit():
-        await message.reply("Использование: /stop <task_id>")
+        await message.reply("Usage: /stop <task_id>")
         return
     
     task_id = int(args[1])
@@ -251,9 +284,9 @@ async def stop_task(message: Message):
     
     if task:
         task_manager.stop_process(task.process_id)
-        await message.reply(f"Задача с ID {task_id} остановлена ⛔")
+        await message.reply(f"Task with ID {task_id} stopped ⛔")
     else:
-        await message.reply("Задача с таким ID не найдена 🧐")
+        await message.reply("Issue with this ID not found 🧐")
 
 
 @dp.message(Command("bot"))
@@ -270,11 +303,11 @@ async def bot_info(message: Message):
     disk_used = disk_usage('/').used // 1024 // 1024 // 1024
     disk_used_percent = disk_usage('/').percent
 
-    msg = "*Статистика*\n\n" \
-          f"*ОЗУ*: {ram_used}/{ram_total} МБ ({ram_used_percent:.1f}%)\n" \
-          f"*ЦПУ*: {cpu_percent()}%\n" \
-          f"*Диск*: {disk_used}/{disk_total} ГБ ({disk_used_percent:.1f}%)\n" \
-          f"*Аптайм*: {uptime}\n\n\n"
+    msg = "*Statistics*\n\n" \
+          f"*RAM*: {ram_used}/{ram_total} МБ ({ram_used_percent:.1f}%)\n" \
+          f"*CPU*: {cpu_percent()}%\n" \
+          f"*Disk*: {disk_used}/{disk_total} ГБ ({disk_used_percent:.1f}%)\n" \
+          f"*Uptime*: {uptime}\n\n\n"
 
     await message.reply(msg, parse_mode="Markdown")
 
@@ -285,13 +318,13 @@ async def get_users(message: Message):
         return
 
     if not get_allowed_users():  # Если список пустой
-        await message.reply("Вайт-лист пуст 💤")
+        await message.reply("Whitelist is empty 💤")
         return
 
     user_list = "\n".join([f"[{user_id}]" for user_id in get_allowed_users()])
 
     # Отправляем ответ
-    await message.reply(f"Список разрешённых пользователей:\n{user_list}")
+    await message.reply(f"List of allowed users:\n{user_list}")
 
 @dp.message(Command("adduser"))
 async def add_user(message: Message):
@@ -321,25 +354,25 @@ async def remove_user(message: Message):
 @dp.message(Command("request"))
 async def apply_whitelist(message: Message):
     user_id = message.from_user.id
-    username = message.from_user.username or "Без имени"
+    username = message.from_user.username or "No name"
     if is_waiter(user_id):
-        await message.reply("Ваша заявка уже отправлена администратору!")
+        await message.reply("Your application has already been sent to the administrator!")
         return
     add_waiter(user_id)
 
     # Клавиатура для принятия/отклонения
     keyboard = InlineKeyboardMarkup(inline_keyboard=[
-        [InlineKeyboardButton(text="✅ Принять", callback_data=f"accept_{user_id}_{username}"),
-         InlineKeyboardButton(text="❌ Отклонить", callback_data=f"reject_{user_id}_{username}")]
+        [InlineKeyboardButton(text="✅ Accept", callback_data=f"accept_{user_id}_{username}"),
+         InlineKeyboardButton(text="❌ Reject", callback_data=f"reject_{user_id}_{username}")]
     ])
 
     # Отправка заявки админу
     await bot.send_message(
         ADMIN_ID,
-        f"Пользователь {username} (ID: {user_id}) подал заявку в вайт-лист.",
+        f"User {username} (ID: {user_id}) submitted an application to the white list.",
         reply_markup=keyboard
     )
-    await message.reply("Ваша заявка отправлена администратору.")
+    await message.reply("Your application has been sent to the administrator.")
 
 # Обработка нажатий кнопок
 @dp.callback_query(lambda c: c.data.startswith("accept") or c.data.startswith("reject"))
@@ -348,12 +381,12 @@ async def process_whitelist(callback: CallbackQuery):
 
     if action == "accept":
         add_allowed_user(int(user_id))
-        await bot.send_message(user_id, "Ваша заявка в вайт-лист принята ✅.")
-        await callback.message.edit_text(f"Пользователь {username} ({user_id}) добавлен в вайт-лист.")
+        await bot.send_message(user_id, "Your application for the white list has been accepted ✅.")
+        await callback.message.edit_text(f"User {username} ({user_id}) has been added to the white list.")
         remove_waiter(int(user_id))
     elif action == "reject":
-        await bot.send_message(user_id, "Ваша заявка в вайт-лист отклонена ❌.")
-        await callback.message.edit_text(f"Пользователь {username} ({user_id}) отклонён.")
+        await bot.send_message(user_id, "Your whitelist application has been rejected ❌.")
+        await callback.message.edit_text(f"User {username} ({user_id}) has been rejected.")
         remove_waiter(int(user_id))
     await callback.answer()
 
