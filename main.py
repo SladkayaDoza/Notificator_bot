@@ -278,7 +278,7 @@ async def list_tasks(message: Message):
     tasks_list = []
     
     for task in tasks:
-        runtime = current_time - task.started_time
+        runtime = task.end_time - task.started_time
         task_description = (
             f"ID: {task.user_task_id} – {os.path.basename(task.task_name)} "
             f": {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
