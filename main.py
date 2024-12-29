@@ -14,7 +14,7 @@ import psutil
 import subprocess
 import datetime
 import platform
-from config import cancel_message, ADMIN_ID, memory_limit
+from config import cancel_message, ADMIN_ID, memory_limit, help_message
 from database import Task, session
 
 IS_WINDOWS = platform.system() == "Windows"
@@ -245,12 +245,11 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
             process.kill()
             return f"Execution", "EXCEPTION", process.pid
         
-
         stdout = '\n'.join(stdout_buffer)
         stderr = '\n'.join(stderr_buffer)
         output = (stdout + stderr).strip()
         
-        status = "✅" if process.returncode == 0 else "❌"
+        status = ("❌", "✅")[not process.returncode]
         
         return output, status, process.pid
     
@@ -356,6 +355,12 @@ async def bot_info(message: Message):
           f"*Uptime*: {uptime}\n\n\n"
 
     await message.reply(msg, parse_mode="Markdown")
+
+@dp.message(Command("help"))
+async def help(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        return
+    await message.reply(help_message, parse_mode="HTML")
 
 @dp.message(Command("getusers"))
 async def get_users(message: Message):
