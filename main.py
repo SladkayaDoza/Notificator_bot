@@ -198,33 +198,58 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
         # Создаем процесс с перенаправлением stdout и stderr
         def set_memory_limit():
             if not IS_WINDOWS and memory_limit is not None:
-                # Преобразуем лимит в байты
-                memory_limit_bytes = memory_limit * 1024 * 1024
                 # Устанавливаем лимит памяти для процесса
+                memory_limit_bytes = memory_limit * 1024 * 1024
                 resource.setrlimit(resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes))
 
-
         process = await asyncio.create_subprocess_exec(
-            sys.executable, script_path,
+            sys.executable, "-u", script_path,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             preexec_fn=set_memory_limit if not IS_WINDOWS else None
         )
+
         task_manager.add_task(message.from_user.id, process.pid, script_name, script_path, message.chat.id)
         
-        # Ожидаем завершение процесса с таймаутом
+        stdout_buffer = []
+        stderr_buffer = []
+
         try:
-            stdout, stderr = await process.communicate()
+            # Асинхронное чтение stdout
+            async def read_stdout():
+                while not process.stdout.at_eof():
+                    line = await process.stdout.readline()
+                    if line:
+                        text = line.decode('utf-8').strip()
+                        stdout_buffer.append(text)
+                        await message.reply(f"> {text}")
+
+            # Асинхронное чтение stderr
+            async def read_stderr():
+                while not process.stderr.at_eof():
+                    line = await process.stderr.readline()
+                    if line:
+                        text = line.decode('utf-8').strip()
+                        stderr_buffer.append(text)
+
+            await asyncio.gather(
+                read_stdout(),
+                read_stderr()
+            )
+
+            await process.wait()
             task_manager.update_status(process.pid, "completed")
-        except asyncio.TimeoutError:
-            task_manager.update_status(process.pid, "timeout")
+            
+        except Exception as e:
+            task_manager.update_status(process.pid, "error")
             process.kill()
-            return f"Execution time exceeded", "TIMEOUT", process.pid
+            return f"Execution", "EXCEPTION", process.pid
         
-        # Декодируем вывод
-        output = (stdout + stderr).decode('utf-8', errors='replace').strip()
+
+        stdout = '\n'.join(stdout_buffer)
+        stderr = '\n'.join(stderr_buffer)
+        output = (stdout + stderr).strip()
         
-        # Определяем статус выполнения
         status = "✅" if process.returncode == 0 else "❌"
         
         return output, status, process.pid
