@@ -156,7 +156,9 @@ async def handle_script(message: Message):
         await message.reply(cancel_message)
         return
 
-    if message.chat.type == "channel" or "supergroup":
+    print(message.chat)
+
+    if message.chat.type in ["channel", "group", "supergroup"]:
         if not message.caption or not '/file' in message.caption: return
 
     document = message.document
