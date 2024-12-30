@@ -65,6 +65,7 @@ This bot allows users to send Python scripts, execute them in a controlled envir
 | `/adduser <user_id>`     | Add a user to the whitelist.                                          |
 | `/removeuser <user_id>`  | Remove a user from the whitelist.                                     |
 | `/request`               | Submit a whitelist request to the administrator.                      |
+| `*/file`                 | Add "/file" if you send file into supergroup or channel.              |
 
 ### Sending Scripts
 1. Prepare a Python script with a `.py` extension.

@@ -156,6 +156,9 @@ async def handle_script(message: Message):
         await message.reply(cancel_message)
         return
 
+    if message.chat.type == "channel" or "supergroup":
+        if not message.caption or not '/file' in message.caption: return
+
     document = message.document
     if not document.file_name.endswith(".py"):
         print("Please send the file with .py extension")
