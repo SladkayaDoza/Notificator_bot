@@ -152,15 +152,13 @@ async def handle_code(message: Message):
 # Обработка загрузки скриптов
 @dp.message(lambda m: m.document)
 async def handle_script(message: Message):
-    if not is_allowed_user(message.from_user.id):
-        await message.reply(cancel_message)
-        return
-
-    print(message.chat)
-
     if message.chat.type in ["channel", "group", "supergroup"]:
         if not message.caption or not '/file' in message.caption: return
 
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+    
     document = message.document
     if not document.file_name.endswith(".py"):
         print("Please send the file with .py extension")
@@ -194,10 +192,10 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
     """
     Асинхронный запуск Python-скрипта с ограничением по времени
     
-    :param task_id: Уникальный идентификатор задачи
+    :param message: объект сообщения
     :param script_path: Путь к скрипту
-    :param timeout: Максимальное время выполнения в секундах
-    :return: Кортеж (вывод, статус)
+    :param script_name: название скрипта
+    :return: Кортеж (вывод, статус, pid)
     """
     try:
         # Создаем процесс с перенаправлением stdout и stderr
@@ -354,9 +352,9 @@ async def bot_info(message: Message):
     disk_used_percent = disk_usage('/').percent
 
     msg = "*Statistics*\n\n" \
-          f"*RAM*: {ram_used}/{ram_total} МБ ({ram_used_percent:.1f}%)\n" \
+          f"*RAM*: {ram_used}/{ram_total} MB ({ram_used_percent:.1f}%)\n" \
           f"*CPU*: {cpu_percent()}%\n" \
-          f"*Disk*: {disk_used}/{disk_total} ГБ ({disk_used_percent:.1f}%)\n" \
+          f"*Disk*: {disk_used}/{disk_total} GB ({disk_used_percent:.1f}%)\n" \
           f"*Uptime*: {uptime}\n\n\n"
 
     await message.reply(msg, parse_mode="Markdown")
