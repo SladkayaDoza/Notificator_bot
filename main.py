@@ -126,6 +126,9 @@ async def handle_code(message: Message):
 # Обработка команды /code
 @dp.message(Command("code"))
 async def handle_code(message: Message):
+    await process_handle_code(message=message)
+
+async def process_handle_code(message: Message):
     if not is_allowed_user(message.from_user.id):
         await message.reply(cancel_message)
         return
@@ -148,6 +151,11 @@ async def handle_code(message: Message):
     await message.reply(f"The code is saved as `{label}`! Adding to the execution queue...", parse_mode="Markdown")
 
     asyncio.create_task(execute_script(message, script_path, label))
+
+@dp.edited_message()
+async def edited_message_handler(message: Message):
+    if message.text.startswith("/code"):
+        await process_handle_code(message)
 
 # Обработка загрузки скриптов
 @dp.message(lambda m: m.document)
