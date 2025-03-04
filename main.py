@@ -58,6 +58,11 @@ class TaskManager:
             task.status = status
             session.commit()
     
+    def hide_status(self, task, status):
+        if task:
+            task.status = status
+            session.commit()
+    
     def set_end_time(self, pid, end_time):
         task = session.query(Task).filter(Task.process_id == pid).first()
         if task:
@@ -322,6 +327,62 @@ async def list_tasks(message: Message):
     
     tasks_text = "\n".join(tasks_list)
     await message.reply(f"**Tasks archive:**\n{tasks_text}", parse_mode="Markdown")
+
+# Команда /hide – Скрыть задачи из архива
+@dp.message(Command("hide"))
+async def hide_archive_tasks(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+    
+    tasks = task_manager.get_archive_tasks(message.chat.id)
+
+    if not tasks:
+        print(tasks)
+        await message.reply("No completed task tasks 💤")
+        return
+
+    args = message.text.split()
+    if len(args) != 2:
+        await message.reply("Usage: /hide <1-6 or 4 or all>")
+        return
+
+    arg = args[1]
+    
+    if arg == "all":
+        for task in tasks:
+            task_manager.hide_status(task, "hide_completed")
+        await message.reply("All archived tasks hidden")
+        return
+        
+    if "-" in arg:
+        try:
+            start, end = map(int, arg.split("-"))
+            if start > end:
+                await message.reply("Start number must be less than end number")
+                return
+            
+            hidden_count = 0
+            for task in tasks:
+                if task.user_task_id < end + 1 and task.user_task_id >= start:
+                    task_manager.hide_status(task, "hide_completed")
+                    hidden_count += 1
+            await message.reply(f"Hidden {hidden_count} tasks from {start} to {end}")
+            return
+        except ValueError:
+            await message.reply("Invalid range format. Use: start-end (e.g. 1-6)")
+            return
+            
+    if not arg.isdigit():
+        await message.reply("Usage: /hide <number or start-end or all>")
+        return
+        
+    task_id = int(arg)
+    for task in tasks:
+        if task.user_task_id == task_id:
+            task_manager.hide_status(task, "hide_completed")
+            await message.reply(f"Task {task_id} hidden")
+            return
 
 # Команда /stop <task_id> – остановить задачу
 @dp.message(Command("kill"))
