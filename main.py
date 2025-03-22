@@ -5,7 +5,7 @@ from users import get_allowed_users, add_allowed_user, remove_allowed_user, is_a
 from aiogram.types import Message, InlineKeyboardMarkup, InlineKeyboardButton, CallbackQuery
 from psutil import cpu_percent, virtual_memory, disk_usage
 from aiogram import Bot, Dispatcher
-from aiogram.types import Message
+from aiogram.types import Message, FSInputFile
 from aiogram.filters import Command
 from dotenv import load_dotenv
 from users import add_waiter, remove_waiter, is_waiter
@@ -82,7 +82,7 @@ class TaskManager:
         return session.query(Task).filter(Task.chat_id == id, Task.status == "active").all()
     
     def get_archive_tasks(self, id):
-        return session.query(Task).filter(Task.chat_id == id, Task.status == "completed").all()
+        return session.query(Task).filter(Task.chat_id == id, Task.status.in_(["completed", "canceled"])).all()
 
     def get_active_task(self, id, task_id):
         return session.query(Task).filter(Task.chat_id == id, Task.user_task_id == task_id, Task.status == "active").first()
@@ -110,7 +110,7 @@ async def start(message: Message):
 
     await message.answer("Hello! Send me a Python script to run 🐍")
 
-# Обработка команды /code
+# Обработка команды /launch
 @dp.message(Command("launch"))
 async def handle_code(message: Message):
     if not is_allowed_user(message.from_user.id):
@@ -127,6 +127,22 @@ async def handle_code(message: Message):
     await message.reply(f"Saved code running as `{label}`! Adding to the execution queue...", parse_mode="Markdown")
 
     asyncio.create_task(execute_script(message, script_path, label))
+
+# Обработка команды /get
+@dp.message(Command("get"))
+async def handle_code(message: Message):
+    if not is_allowed_user(message.from_user.id):
+        await message.reply(cancel_message)
+        return
+    task_id = message.text.split(maxsplit=1)[1]
+    task = task_manager.get_all_task(message.chat.id, task_id)
+    if not task:
+        await message.reply(f"There is no task with this ID")
+    
+    script_path = task.code_path
+
+    file = FSInputFile(script_path)
+    await message.reply_document(document=file)
 
 # Обработка команды /code
 @dp.message(Command("code"))
@@ -319,9 +335,10 @@ async def list_tasks(message: Message):
     
     for task in tasks:
         runtime = task.end_time - task.started_time
+        runtime = f": {"canceled " if task.status != "completed" else ""}{runtime.days}d {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
         task_description = (
             f"ID: {task.user_task_id} – {os.path.basename(task.task_name)} "
-            f": {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
+            f"{runtime}"
         )
         tasks_list.append(task_description)
     
@@ -351,7 +368,7 @@ async def hide_archive_tasks(message: Message):
     
     if arg == "all":
         for task in tasks:
-            task_manager.hide_status(task, "hide_completed")
+            task_manager.hide_status(task, f"hide_{task.status}")
         await message.reply("All archived tasks hidden")
         return
         
@@ -400,6 +417,7 @@ async def stop_task(message: Message):
     task = task_manager.get_active_task(message.chat.id, task_id)
     
     if task:
+        task.end_time = datetime.datetime.now()
         task_manager.stop_process(task.process_id)
         await message.reply(f"Task with ID {task_id} stopped ⛔")
     else:
