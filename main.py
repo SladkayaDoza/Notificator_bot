@@ -335,7 +335,7 @@ async def list_tasks(message: Message):
     
     for task in tasks:
         runtime = task.end_time - task.started_time
-        runtime = f": {"canceled " if task.status != "completed" else ""}{runtime.days}d {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
+        runtime = f": {'canceled ' if task.status != 'completed' else ''}{runtime.days}d {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
         task_description = (
             f"ID: {task.user_task_id} – {os.path.basename(task.task_name)} "
             f"{runtime}"
