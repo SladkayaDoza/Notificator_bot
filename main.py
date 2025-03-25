@@ -80,12 +80,18 @@ class TaskManager:
 
     def get_active_tasks(self, id):
         return session.query(Task).filter(Task.chat_id == id, Task.status == "active").all()
+
+    def get_all_active_tasks(self):
+        return session.query(Task).filter(Task.status == "active").all()
     
     def get_archive_tasks(self, id):
         return session.query(Task).filter(Task.chat_id == id, Task.status.in_(["completed", "canceled"])).all()
 
     def get_active_task(self, id, task_id):
         return session.query(Task).filter(Task.chat_id == id, Task.user_task_id == task_id, Task.status == "active").first()
+    
+    def get_task_by_pid(self, id, pid):
+        return session.query(Task).filter(Task.chat_id == id, Task.process_id == pid, Task.status == "active").first()
     
     def get_all_task(self, id, task_id):
         return session.query(Task).filter(Task.chat_id == id, Task.user_task_id == task_id).first()
@@ -100,6 +106,11 @@ class TaskManager:
 
 # Создаем менеджер задач
 task_manager = TaskManager()
+
+# Проверка существования процесса    
+def is_process_running(pid: int) -> bool:
+    return psutil.pid_exists(pid)
+
 
 # Команда /start
 @dp.message(Command("start"))
@@ -306,12 +317,17 @@ async def list_tasks(message: Message):
     tasks_list = []
     
     for task in tasks:
-        runtime = current_time - task.started_time
-        task_description = (
-            f"ID: {task.user_task_id} – {os.path.basename(task.task_name)} "
-            f": {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
-        )
-        tasks_list.append(task_description)
+        if is_process_running(task.process_id):
+            runtime = current_time - task.started_time
+            task_description = (
+                f"ID: {task.user_task_id} – {os.path.basename(task.task_name)} "
+                f": {runtime.days}d {runtime.seconds // 3600}:{(runtime.seconds // 60) % 60:02}:{runtime.seconds % 60:02}.{str(runtime.microseconds)[:3]}"
+            )
+            tasks_list.append(task_description)
+        else:
+            task = task_manager.get_task_by_pid(message.chat.id, task.process_id)
+            task_manager.update_status(task.process_id, "canceled")
+            await message.reply(f"**Task {task.task_name} no longer exists**", parse_mode="Markdown")
     
     tasks_text = "\n".join(tasks_list)
     await message.reply(f"**Active tasks:**\n{tasks_text}", parse_mode="Markdown")
@@ -534,10 +550,17 @@ async def process_whitelist(callback: CallbackQuery):
         remove_waiter(int(user_id))
     await callback.answer()
 
+async def on_startup():
+    tasks = task_manager.get_all_active_tasks()
+    for task in tasks:
+        task_manager.update_status(task.process_id, "canceled")
+        await bot.send_message(task.chat_id, f"❌ The task no longer exists: `{task.task_name}`.", parse_mode="Markdown")
+
 # Запуск бота
 async def main():
     print("Bot runned!")
-    await dp.start_polling(bot)
+    await asyncio.create_task(on_startup())
+    await dp.start_polling(bot, on_startup=on_startup)
 
 if __name__ == "__main__":
     asyncio.run(main())
