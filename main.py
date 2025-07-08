@@ -127,17 +127,28 @@ async def handle_code(message: Message):
     if not is_allowed_user(message.from_user.id):
         await message.reply(cancel_message)
         return
-    task_id = message.text.split(maxsplit=1)[1]
-    task = task_manager.get_all_task(message.chat.id, task_id)
-    if not task:
-        await message.reply(f"There is no task with this ID")
     
-    script_path = task.code_path
-    label = task.task_name
+    parts = message.text.split(maxsplit=1)
+    if len(parts) == 1:
+        await message.reply("❗ Specify at least one task ID, e.g. `/launch 1 3 7`", parse_mode="Markdown")
+        return
+    
+    ids = parts[1].split()
+    not_found = []
+    tasks_to_run = []
 
-    await message.reply(f"Saved code running as `{label}`! Adding to the execution queue...", parse_mode="Markdown")
-
-    asyncio.create_task(execute_script(message, script_path, label))
+    for task_id in ids:
+        task = task_manager.get_all_task(message.chat.id, task_id)
+        if not task: not_found.append(task_id)
+        else: tasks_to_run.append((task.code_path, task.task_name))
+    
+    if not_found: await message.reply("No task found for IDs: " + ", ".join(not_found), parse_mode="Markdown")
+    
+    if tasks_to_run:
+        queued_names = [name for _, name in tasks_to_run]
+        await message.reply("Queued: " + ", ".join(f"`{name}`" for name in queued_names), parse_mode="Markdown")
+        for script_path, label in tasks_to_run:
+            asyncio.create_task(execute_script(message, script_path, label))
 
 # Обработка команды /get
 @dp.message(Command("get"))
@@ -200,9 +211,9 @@ async def handle_script(message: Message):
         return
     
     document = message.document
-    if not document.file_name.endswith(".py"):
-        print("Please send the file with .py extension")
-        await message.reply("Please send the file with .py extension")
+    if not document.file_name.endswith((".py", ".js")):
+        print("Please send the file with .py or .js extension")
+        await message.reply("Please send the file with .py or .js extension")
         return
 
     # Сохраняем скрипт
@@ -245,11 +256,19 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
                 memory_limit_bytes = memory_limit * 1024 * 1024
                 resource.setrlimit(resource.RLIMIT_AS, (memory_limit_bytes, memory_limit_bytes))
 
+        ext = os.path.splitext(script_path)[1].lower()
+        if ext == ".js":
+            cmd = ["node", script_path]
+            preexec = None
+        else:
+            cmd = [sys.executable, "-u", script_path]
+            preexec = set_memory_limit if not IS_WINDOWS else None
+        
         process = await asyncio.create_subprocess_exec(
-            sys.executable, "-u", script_path,
+            *cmd,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
-            preexec_fn=set_memory_limit if not IS_WINDOWS else None
+            preexec_fn=preexec
         )
 
         task_manager.add_task(message.from_user.id, process.pid, script_name, script_path, message.chat.id)
@@ -265,7 +284,7 @@ async def run_script(message: Message, script_path: str, script_name: str) -> tu
                     if line:
                         text = line.decode('utf-8').strip()
                         stdout_buffer.append(text)
-                        await message.reply(f"> {text}")
+                        await message.reply(f"> {text}", parse_mode="Markdown", disable_notification=text.startswith("|"))
 
             # Асинхронное чтение stderr
             async def read_stderr():

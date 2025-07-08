@@ -53,12 +53,12 @@ This bot allows users to send Python scripts, execute them in a controlled envir
 ### Commands
 
 | **Command**              | **Description**                                                       |
-|--------------------------|------------------------------------------------------------------------|
+|--------------------------|-----------------------------------------------------------------------|
 | `/start`                 | Start interaction with the bot.                                       |
 | `/code <script>`         | Send code directly as a command.                                      |
 | `/tasks`                 | List all active tasks.                                                |
 | `/archive`               | List of completed tasks.                                              |
-| `/launch <task_id>`      | Running a script from the archive.                                    |
+| `/launch <task_ids>`     | Running a scripts from the archive.                                   |
 | `/kill <task_id>`        | Stop a specific task.                                                 |
 | `/bot`                   | Display bot and system statistics.                                    |
 | `/getusers`              | List all allowed users.                                               |
